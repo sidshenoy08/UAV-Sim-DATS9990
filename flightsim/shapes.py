@@ -14,6 +14,59 @@ from mpl_toolkits.mplot3d import art3d
 import matplotlib.colors as mcolors
 from scipy.spatial.transform import Rotation
 
+
+def compute_normals(verts):
+    """
+    Compute normal vectors for each face of the cuboid.
+    Parameters
+            verts, np.ndarray, shape (n_faces, n_vertices, 3)
+    Returns : np.ndarray, shape (n_faces, 3)
+    """
+    verts = np.asarray(verts, dtype=float)
+    normals = []
+    for face in verts:
+        v1 = face[1] - face[0]
+        v2 = face[2] - face[0]
+        n = np.cross(v1, v2)
+        norm = np.linalg.norm(n)
+        if norm == 0:
+            n = np.array([0.0, 0.0, 0.0])
+        else:
+            n = n / norm
+        normals.append(n)
+    return np.array(normals)
+
+
+def shade_colors(base_color, normals, light_azdeg=45, light_altdeg=45):
+    """
+    Emulate matplotlib's old _shade_colors behavior using LightSource.
+    Parameters
+            base_color: RGBA or RGB color array (shape (4,) or (n, 4))
+            normals: (n_faces, 3) array of unit normals
+    Returns: array of shaded RGBA colors
+    """
+    # Create light source
+    ls = mcolors.LightSource(azdeg=light_azdeg, altdeg=light_altdeg)
+
+    # Convert base color to RGBA array (n_faces, 4)
+    base_color = np.atleast_2d(base_color)
+    if base_color.shape[0] == 1:
+        base_color = np.repeat(base_color, normals.shape[0], axis=0)
+
+    # Compute intensity from normals (simple dot product with light dir)
+    intensity = ls.shade_normals(normals)
+
+    # Apply intensity to base color (simulate lighting)
+    shaded = np.clip(base_color[:, :3] * intensity[:, None], 0, 1)
+
+    # Keep alpha channel
+    if base_color.shape[1] == 4:
+        alpha = base_color[:, 3:4]
+        shaded = np.concatenate((shaded, alpha), axis=1)
+
+    return shaded
+
+
 class Face():
 
     def __init__(self, ax, corners, *,
@@ -45,7 +98,10 @@ class Face():
 
         # Precompute verticies and normal vectors in reference configuration.
         self.verts = np.reshape(corners, (1, -1, 3))
-        self.normals = np.asarray(self.ax._generate_normals(self.verts))
+        self.normals = compute_normals(self.verts)
+
+        # Change made here
+        # self.normals = np.asarray(self.ax._generate_normals(self.verts))
 
         # Instantiate and add collection.
         self.polyc = art3d.Poly3DCollection(self.verts, linewidth=linewidth, antialiased=antialiased, alpha=alpha, edgecolors=edgecolors, facecolors=self.facecolors)
@@ -65,7 +121,10 @@ class Face():
 
         if self.shade:
             normals = np.matmul(rotation, self.normals.T).T
-            colset = self.ax._shade_colors(self.facecolors, normals)
+            colset = shade_colors(self.facecolors, normals)
+
+            # Change made here
+            # colset = self.ax._shade_colors(self.facecolors, normals)
         else:
             colset = self.facecolors
         self.polyc.set_facecolors(colset)
@@ -103,7 +162,10 @@ class Cuboid():
 
         # Precompute verticies and normal vectors in reference configuration.
         self.verts = self.build_verts(x_span, y_span, z_span)
-        self.normals = np.asarray(self.ax._generate_normals(self.verts))
+        self.normals = compute_normals(self.verts)
+
+        # Change made here
+        # self.normals = np.asarray(self.ax._generate_normals(self.verts))
 
         # Instantiate and add collection.
         self.polyc = art3d.Poly3DCollection(self.verts, linewidth=linewidth, antialiased=antialiased, alpha=alpha, edgecolors=edgecolors, facecolors=self.facecolors)
@@ -123,7 +185,10 @@ class Cuboid():
 
         if self.shade:
             normals = np.matmul(rotation, self.normals.T).T
-            colset = self.ax._shade_colors(self.facecolors, normals)
+            colset = shade_colors(self.facecolors, normals)
+
+            # Change made here
+            # colset = self.ax._shade_colors(self.facecolors, normals)
         else:
             colset = self.facecolors
         self.polyc.set_facecolors(colset)
@@ -181,7 +246,10 @@ class Cylinder():
 
         # Precompute verticies and normal vectors in reference configuration.
         self.verts = self.build_verts(radius, height, n_pts)
-        self.normals = np.asarray(self.ax._generate_normals(self.verts))
+        self.normals = compute_normals(self.verts)
+
+        # Change made here
+        # self.normals = np.asarray(self.ax._generate_normals(self.verts))
 
         # Instantiate and add collection.
         self.polyc = art3d.Poly3DCollection(self.verts, color='b', linewidth=0, antialiased=False)
@@ -200,7 +268,10 @@ class Cylinder():
 
         if self.shade:
             normals = np.matmul(rotation, self.normals.T).T
-            colset = self.ax._shade_colors(self.color, normals)
+            colset = shade_colors(self.color, normals)
+
+            # Change made here
+            # colset = self.ax._shade_colors(self.color, normals)
         else:
             colset = self.color
         self.polyc.set_facecolors(colset)

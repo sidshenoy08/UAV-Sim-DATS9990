@@ -16,7 +16,8 @@ setup(
             'pyyaml',
             'opencv-python',
             'cvxopt',
-            'matplotlib == 3.2.2',
+            'matplotlib',
             'numpy',
+            'pandas',
             'scipy',
             'timeout_decorator'])

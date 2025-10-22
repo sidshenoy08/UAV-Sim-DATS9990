@@ -136,9 +136,17 @@ class Axes3Ds(Axes3D):
         # look into the middle of the new coordinates
         R = pb_aspect / 2
 
-        xp = R[0] + np.cos(razim) * np.cos(relev) * self.dist
-        yp = R[1] + np.sin(razim) * np.cos(relev) * self.dist
-        zp = R[2] + np.sin(relev) * self.dist
+        diagonal = np.linalg.norm(pb_aspect)
+        dist = diagonal * 1.5
+
+        # Change made here
+        # xp = R[0] + np.cos(razim) * np.cos(relev) * self.dist
+        # yp = R[1] + np.sin(razim) * np.cos(relev) * self.dist
+        # zp = R[2] + np.sin(relev) * self.dist
+
+        xp = R[0] + np.cos(razim) * np.cos(relev) * dist
+        yp = R[1] + np.sin(razim) * np.cos(relev) * dist
+        zp = R[2] + np.sin(relev) * dist
         E = np.array((xp, yp, zp))
 
         self.eye = E
@@ -150,10 +158,14 @@ class Axes3Ds(Axes3D):
             V = np.array((0, 0, -1))
         else:
             V = np.array((0, 0, 1))
-        zfront, zback = -self.dist, self.dist
+        zfront, zback = -dist, dist
 
-        viewM = proj3d.view_transformation(E, R, V)
-        projM = self._projection(zfront, zback)
+        viewM = proj3d.view_transformation(E, R, V, roll=0.0)
+        projM = proj3d.persp_transformation(zfront, zback, dist)
+
+        # Change made here
+        # projM = self._projection(zfront, zback)
+
         M0 = np.dot(viewM, worldM)
         M = np.dot(projM, M0)
         return M
