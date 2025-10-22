@@ -1,7 +1,9 @@
 
 import inspect
 import numpy as np
+import pandas as pd
 import time
+import random
 import json
 import yaml
 from pathlib import Path
@@ -79,12 +81,53 @@ stereo = StereoUtils(world, vio.camera_matrix, sample_resolution = sample_resolu
 # the quadrotor state, the control outputs calculated by your controller, and
 # the flat outputs calculated by you trajectory.
 print()
+# print('Simulate.')
+# (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
+#                                               quadrotor,
+#                                               my_se3_control,
+#                                               my_world_traj,
+#                                               t_final, stereo=stereo, vio=vio)
+# print(exit.value)
+
+rotor_indices = [0, 1, 2, 3]
+broken_index = random.sample(rotor_indices, 1)[0]
+
 print('Simulate.')
 (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
                                               quadrotor,
                                               my_se3_control,
                                               my_world_traj,
-                                              t_final, stereo=stereo, vio=vio)
+                                              t_final, stereo=stereo, vio=vio, broken_index=broken_index, thrust_scale=0.0)
+print(exit.value)
+
+
+# Save sim data (IMU data) to csv file
+accelerometer_data = [imu[0] for imu in imu_measurements]
+gyroscope_data = [imu[1] for imu in imu_measurements]
+
+imu_readings_df = pd.DataFrame({
+    'time': sim_time[:len(accelerometer_data)],
+    'accelerometer_x': [a[0] for a in accelerometer_data],
+    'accelerometer_y': [a[1] for a in accelerometer_data],
+    'accelerometer_z': [a[2] for a in accelerometer_data],
+    'gyroscope_x': [g[0] for g in gyroscope_data],
+    'gyroscope_y': [g[1] for g in gyroscope_data],
+    'gyroscope_z': [g[2] for g in gyroscope_data]
+})
+
+imu_readings_df['broken_index'] = broken_index
+
+imu_readings_df.to_csv('imu_readings.csv', index=False)
+print("IMU readings saved to file")
+
+# Save metadata for fault injection
+sim_metadata = {
+    "broken_index": broken_index,
+}
+
+with open("metadata.json", "w") as metadata_dump:
+    json.dump(sim_metadata, metadata_dump)
+
 print(exit.value)
 
 ###############VIO PLOTTING####################################
