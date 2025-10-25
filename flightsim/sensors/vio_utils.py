@@ -173,9 +173,10 @@ class Vio():
             odom_pos = gt_state['x']
             odom_rot = (Rotation.from_quat(gt_state['q'])).as_matrix()
             valid_features_normalized_uv, valid_features_inverse_depth, P1_all, index_of_valid_features = stereo.get_valid_features(odom_pos, odom_rot, self.R_body2sensor)
-            if valid_features_normalized_uv.shape[0] == 0:
-                print("FEATURE EXTRACTION: NO FEATURE FOUND, SKIPPING THIS UPDATE STEP FOR STEREO CAMERAS!")
-            else:
+            # if valid_features_normalized_uv.shape[0] == 0:
+            #     print("FEATURE EXTRACTION: NO FEATURE FOUND, SKIPPING THIS UPDATE STEP FOR STEREO CAMERAS!")
+            # else:
+            if valid_features_normalized_uv.shape[0] != 0:
                 uv_new = valid_features_normalized_uv
                 depth = 1.0 / valid_features_inverse_depth
                 # each column is a feature
@@ -187,9 +188,10 @@ class Vio():
                     self.prev_depth = depth
                 else:
                     common_features_index, prev_ind_common, ind_common = np.intersect1d(self.prev_index_of_valid_features, index_of_valid_features, return_indices=True)
-                    if len(ind_common) == 0:
-                        print("FEATURE TRACK: NO VALID FEATURE TRACK FOUND, SKIPPING THIS UPDATE STEP FOR STEREO CAMERAS!")
-                    else:
+                    # if len(ind_common) == 0:
+                    #     print("FEATURE TRACK: NO VALID FEATURE TRACK FOUND, SKIPPING THIS UPDATE STEP FOR STEREO CAMERAS!")
+                    # else:
+                    if len(ind_common) != 0:
                         # only perform measurement update if there are valid features found!]
                         innovations = np.zeros((2, common_features_index.shape[0]))
                         for i in range(0, common_features_index.shape[0]):
@@ -224,11 +226,11 @@ class Vio():
                         count = (norm(innovations, axis=0) < self.error_threshold).sum()
 
                         pixel_error = np.median(abs(innovations), axis=1) * self.focal_length
-                        print("{} / {} inlier ratio, x_error {:.4f}, y_error {:.4f}, norm_v {:.4f}".format(count, uv_new.shape[1],
-                                                                                                           pixel_error[0],
-                                                                                                           pixel_error[1],
-                                                                                                           norm(self.nominal_state[
-                                                                                                                    1])))
+                        # print("{} / {} inlier ratio, x_error {:.4f}, y_error {:.4f}, norm_v {:.4f}".format(count, uv_new.shape[1],
+                        #                                                                                    pixel_error[0],
+                        #                                                                                    pixel_error[1],
+                        #                                                                                    norm(self.nominal_state[
+                        #                                                                                             1])))
 
                         # These variables encode last stereo pose
                         self.last_R = self.nominal_state[2].as_matrix()

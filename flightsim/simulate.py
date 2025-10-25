@@ -20,7 +20,7 @@ class ExitStatus(Enum):
     FLY_AWAY = 'Failure: Your quadrotor is out of control; it flew away with a position error greater than 20 meters.'
 
 
-def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminate=None, vio=None, stereo=None, broken_index=-1, thrust_scale=0.0):
+def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminate=None, vio=None, stereo=None, broken_index=-1, thrust_scale=1.0, fault_time=0.0):
     """
     Perform a quadrotor simulation and return the numerical results.
 
@@ -79,7 +79,7 @@ def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminat
     t_step = 1 / 500  # in seconds, determines control loop frequency
     if vio is not None:
         t_step = 1 / vio.sampling_rate
-        print('Running VIO, reducing simulator to', 1 / t_step, ' Hz!!!')
+        # print('Running VIO, reducing simulator to', 1 / t_step, ' Hz!!!')
     time = [0]
     state = [copy.deepcopy(initial_state)]
     images_feature = []
@@ -92,22 +92,22 @@ def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminat
 
     # Initialize VIO 
     if vio is not None and not vio.initialized:
-        state_dot = quadrotor.statedot(state[0], control[0]['cmd_motor_speeds'], t_step, broken_index=broken_index, thrust_scale=thrust_scale)
+        state_dot = quadrotor.statedot(state[0], control[0]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time)
         vio.initialize(state[0], state_dot, time[0])
     if vio is not None and not stereo.initialized:
         stereo.sample_features()
 
     while True:
-        exit_status = exit_status or safety_exit(state[-1], flat[-1], control[-1])
-        exit_status = exit_status or normal_exit(time[-1], state[-1])
+        # exit_status = exit_status or safety_exit(state[-1], flat[-1], control[-1])
+        # exit_status = exit_status or normal_exit(time[-1], state[-1])
         exit_status = exit_status or time_exit(time[-1], t_final)
         if exit_status:
             break
         time.append(time[-1] + t_step)
-        state.append(quadrotor.step(state[-1], control[-1]['cmd_motor_speeds'], t_step, broken_index=broken_index, thrust_scale=thrust_scale))
+        state.append(quadrotor.step(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time))
         flat.append(sanitize_trajectory_dic(trajectory.update(time[-1])))
         if vio is not None:
-            state_dot = quadrotor.statedot(state[-1], control[-1]['cmd_motor_speeds'], t_step, broken_index=broken_index, thrust_scale=thrust_scale)
+            state_dot = quadrotor.statedot(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time)
             state_estimated, image_feature, imu_measurement = vio.step(state[-1], state_dot, time[-1], stereo)
             if image_feature is not None:
                 # meaning that the camera update is triggered
@@ -287,15 +287,14 @@ class Quadrotor(object):
         self.inv_inertia = inv(self.inertia)
         self.weight = np.array([0, 0, -self.mass * self.g])
 
-    def statedot(self, state, cmd_rotor_speeds, t_step, broken_index=-1, thrust_scale=0.0):
+    def statedot(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=1.0, fault_time=0.0):
         """
         Integrate dynamics forward from state given constant cmd_rotor_speeds for time t_step.
         """
-
         # The true motor speeds can not fall below min and max speeds.
         rotor_speeds = np.clip(cmd_rotor_speeds, self.rotor_speed_min, self.rotor_speed_max)
 
-        if broken_index != -1:
+        if broken_index != -1 and curr_time >= fault_time:
             # reduce thrust and drag for a broken motor
             rotor_speeds[broken_index] *= math.sqrt(thrust_scale)
 
@@ -318,7 +317,7 @@ class Quadrotor(object):
         state_dot = {'vdot': v_dot, 'wdot': w_dot}
         return state_dot
 
-    def step(self, state, cmd_rotor_speeds, t_step, broken_index=-1, thrust_scale=0.0):
+    def step(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=1.0, fault_time=0.0):
         """
         Integrate dynamics forward from state given constant cmd_rotor_speeds for time t_step.
         """
@@ -326,7 +325,7 @@ class Quadrotor(object):
         # The true motor speeds can not fall below min and max speeds.
         rotor_speeds = np.clip(cmd_rotor_speeds, self.rotor_speed_min, self.rotor_speed_max)
 
-        if broken_index != -1:
+        if broken_index != -1 and curr_time >= fault_time:
             # reduce thrust and drag for a broken motor
             rotor_speeds[broken_index] *= math.sqrt(thrust_scale)
 

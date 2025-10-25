@@ -1,4 +1,4 @@
-
+import csv
 import inspect
 import numpy as np
 import pandas as pd
@@ -53,7 +53,7 @@ planning_end_time = time.time()
 
 
 # Set simulation parameters.
-t_final = 150
+t_final = 15
 initial_state = {'x': start,
                  'v': (0, 0, 0),
                  'q': (0, 0, 0, 1), # [i,j,k,w]
@@ -89,46 +89,92 @@ print()
 #                                               t_final, stereo=stereo, vio=vio)
 # print(exit.value)
 
-rotor_indices = [0, 1, 2, 3]
-broken_index = random.sample(rotor_indices, 1)[0]
+N_RUNS = 1
 
-print('Simulate.')
-(sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
-                                              quadrotor,
-                                              my_se3_control,
-                                              my_world_traj,
-                                              t_final, stereo=stereo, vio=vio, broken_index=broken_index, thrust_scale=0.0)
-print(exit.value)
+# rotor_indices = [-1, 0, 1, 2, 3]
+# broken_index = random.choice(rotor_indices)
+#
+# thrust_scale = random.uniform(0.0, 1.0)
+
+with open("imu_readings.csv", "w", newline='') as data_file:
+    writer = csv.writer(data_file)
+    writer.writerow(['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y', 'gyroscope_z', 'broken_index', 'thrust_scale'])
+    for run_id in range(N_RUNS):
+        rotor_indices = [-1, 0, 1, 2, 3]
+        broken_index = random.choice(rotor_indices)
+        thrust_scale = random.uniform(0.0, 1.0) if broken_index != -1 else 1
+        fault_time = random.uniform(0.1 * t_final, 0.8 * t_final) if broken_index != -1 else 0
+
+        # print(broken_index, thrust_scale, fault_time)
+
+        print('Simulate.')
+        (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
+                                                                                       quadrotor,
+                                                                                       my_se3_control,
+                                                                                       my_world_traj,
+                                                                                       t_final, stereo=stereo, vio=vio,
+                                                                                       broken_index=broken_index,
+                                                                                       thrust_scale=thrust_scale,
+                                                                                       fault_time=fault_time)
+        print(exit.value)
+
+        accelerometer_data = [imu[0] for imu in imu_measurements]
+        gyroscope_data = [imu[1] for imu in imu_measurements]
+
+        for i in range(len(accelerometer_data)):
+            accelerometer_x, accelerometer_y, accelerometer_z = accelerometer_data[i]
+            gyroscope_x, gyroscope_y, gyroscope_z = gyroscope_data[i]
+            time_stamp = sim_time[i]
+
+            writer.writerow([run_id,
+                             time_stamp,
+                             accelerometer_x,
+                             accelerometer_y,
+                             accelerometer_z,
+                             gyroscope_x,
+                             gyroscope_y,
+                             gyroscope_z,
+                             -1 if time_stamp < fault_time else broken_index,
+                             1 if time_stamp < fault_time else thrust_scale])
+
+# print('Simulate.')
+# (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
+#                                               quadrotor,
+#                                               my_se3_control,
+#                                               my_world_traj,
+#                                               t_final, stereo=stereo, vio=vio, broken_index=broken_index, thrust_scale=thrust_scale)
+# print(exit.value)
 
 
-# Save sim data (IMU data) to csv file
-accelerometer_data = [imu[0] for imu in imu_measurements]
-gyroscope_data = [imu[1] for imu in imu_measurements]
+# # Save sim data (IMU data) to csv file
+# accelerometer_data = [imu[0] for imu in imu_measurements]
+# gyroscope_data = [imu[1] for imu in imu_measurements]
+#
+# imu_readings_df = pd.DataFrame({
+#     'time': sim_time[:len(accelerometer_data)],
+#     'accelerometer_x': [a[0] for a in accelerometer_data],
+#     'accelerometer_y': [a[1] for a in accelerometer_data],
+#     'accelerometer_z': [a[2] for a in accelerometer_data],
+#     'gyroscope_x': [g[0] for g in gyroscope_data],
+#     'gyroscope_y': [g[1] for g in gyroscope_data],
+#     'gyroscope_z': [g[2] for g in gyroscope_data]
+# })
+#
+# imu_readings_df['broken_index'] = broken_index
+#
+# imu_readings_df.to_csv('imu_readings.csv', index=False)
+# print("IMU readings saved to file")
+#
+# # Save metadata for fault injection
+# sim_metadata = {
+#     "broken_index": broken_index,
+#     "thrust_scale": thrust_scale
+# }
+#
+# with open("metadata.json", "w") as metadata_dump:
+#     json.dump(sim_metadata, metadata_dump)
 
-imu_readings_df = pd.DataFrame({
-    'time': sim_time[:len(accelerometer_data)],
-    'accelerometer_x': [a[0] for a in accelerometer_data],
-    'accelerometer_y': [a[1] for a in accelerometer_data],
-    'accelerometer_z': [a[2] for a in accelerometer_data],
-    'gyroscope_x': [g[0] for g in gyroscope_data],
-    'gyroscope_y': [g[1] for g in gyroscope_data],
-    'gyroscope_z': [g[2] for g in gyroscope_data]
-})
-
-imu_readings_df['broken_index'] = broken_index
-
-imu_readings_df.to_csv('imu_readings.csv', index=False)
-print("IMU readings saved to file")
-
-# Save metadata for fault injection
-sim_metadata = {
-    "broken_index": broken_index,
-}
-
-with open("metadata.json", "w") as metadata_dump:
-    json.dump(sim_metadata, metadata_dump)
-
-print(exit.value)
+# print(exit.value)
 
 ###############VIO PLOTTING####################################
 # %% Gather results

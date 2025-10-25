@@ -16,7 +16,7 @@ class StereoUtils():
         self.plot_initialized = False
         self.visualize_interval = 10
         self.visualize_counter = 0
-        print('Visualizer for stereo features is set as: ', self.visualize)
+        # print('Visualizer for stereo features is set as: ', self.visualize)
         self.feature_coords = None
         # sampling resolution in meters
 
@@ -186,7 +186,7 @@ class StereoUtils():
 
         # step: take the top (closest) max_count features
         if remaining_features.shape[0] > self.max_count:
-            print('number of features in front of camera > threshold, the number is: ', remaining_features.shape[0], '. Only using the closest ', self.max_count, ' features.')
+            # print('number of features in front of camera > threshold, the number is: ', remaining_features.shape[0], '. Only using the closest ', self.max_count, ' features.')
             diff = remaining_features - odom_position
             diff_values = np.linalg.norm(diff, axis = 1)
             sort_idx = np.argsort(diff_values)
@@ -232,8 +232,8 @@ class StereoUtils():
             if self.visualize_counter % self.visualize_interval == 0:
                 visualize_3d = True
                 dir = "/home/sam/meam620-final-project-demos/stereo/"
-                if not os.path.isdir(dir):
-                    print('change figure save directory to your own directory!!!')
+                # if not os.path.isdir(dir):
+                #     print('change figure save directory to your own directory!!!')
                 if visualize_3d:
                     valid_features_3d = remaining_features
                     camera_origin = np.linalg.pinv(H_world2cam1) @ np.array([0,0,0,1])
@@ -270,8 +270,8 @@ class StereoUtils():
 
         valid_features_depth = features_coord_in_cam1[:,2]
         num_valid_features = valid_features_depth.shape[0]
-        if num_valid_features == 0:
-            print("no valid feature found!!")
+        # if num_valid_features == 0:
+        #     print("no valid feature found!!")
 
         # those are what we need for running VIO (u v and depth of features in camera 1)
         # self.valid_features_uvd_cam1 = np.column_stack((valid_features_2d, valid_features_depth))
