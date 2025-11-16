@@ -89,7 +89,19 @@ print()
 #                                               t_final, stereo=stereo, vio=vio)
 # print(exit.value)
 
-N_RUNS = 1
+N_RUNS = 500
+
+def generate_thrust():
+    r = random.random()
+    if r < 0.5:
+        randomized_thrust = random.uniform(0.0, 0.25)
+    elif r < 0.8:
+        randomized_thrust = random.uniform(0.25, 0.6)
+    else:
+        randomized_thrust = random.uniform(0.6, 1.0)
+    # randomized_thrust = random.uniform(0.0, 0.3)
+    # return random.uniform(0.05, 0.25)
+    return randomized_thrust
 
 # rotor_indices = [-1, 0, 1, 2, 3]
 # broken_index = random.choice(rotor_indices)
@@ -98,12 +110,26 @@ N_RUNS = 1
 
 with open("imu_readings.csv", "w", newline='') as data_file:
     writer = csv.writer(data_file)
-    writer.writerow(['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y', 'gyroscope_z', 'broken_index', 'thrust_scale'])
+    writer.writerow(
+        ['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y',
+         'gyroscope_z', 'fault_active'])
+    # writer.writerow(['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y', 'gyroscope_z', 'broken_index', 'thrust_scale', 'fault_active'])
+    # for broken_index in [-1, 0, 1, 2, 3]:
     for run_id in range(N_RUNS):
         rotor_indices = [-1, 0, 1, 2, 3]
         broken_index = random.choice(rotor_indices)
-        thrust_scale = random.uniform(0.0, 1.0) if broken_index != -1 else 1
-        fault_time = random.uniform(0.1 * t_final, 0.8 * t_final) if broken_index != -1 else 0
+        thrust_scale = 1.0
+        fault_profile = "normal"
+
+        if broken_index != -1:
+            thrust_scale = generate_thrust()
+            fault_profile = random.choice(["abrupt", "ramp", "intermittent"])
+        else:
+            thrust_scale = random.uniform(0.85, 1.15)
+
+        # thrust_scale = random.uniform(0.0, 1.0) if broken_index != -1 else 1
+
+        fault_time = round(random.uniform(0.1 * t_final, 0.8 * t_final), 3) if broken_index != -1 else 100
 
         # print(broken_index, thrust_scale, fault_time)
 
@@ -115,27 +141,30 @@ with open("imu_readings.csv", "w", newline='') as data_file:
                                                                                        t_final, stereo=stereo, vio=vio,
                                                                                        broken_index=broken_index,
                                                                                        thrust_scale=thrust_scale,
-                                                                                       fault_time=fault_time)
+                                                                                       fault_time=fault_time,
+                                                                                       fault_profile=fault_profile)
         print(exit.value)
 
         accelerometer_data = [imu[0] for imu in imu_measurements]
         gyroscope_data = [imu[1] for imu in imu_measurements]
 
         for i in range(len(accelerometer_data)):
-            accelerometer_x, accelerometer_y, accelerometer_z = accelerometer_data[i]
-            gyroscope_x, gyroscope_y, gyroscope_z = gyroscope_data[i]
-            time_stamp = sim_time[i]
+                accelerometer_x, accelerometer_y, accelerometer_z = accelerometer_data[i]
+                gyroscope_x, gyroscope_y, gyroscope_z = gyroscope_data[i]
+                time_stamp = sim_time[i]
 
-            writer.writerow([run_id,
-                             time_stamp,
-                             accelerometer_x,
-                             accelerometer_y,
-                             accelerometer_z,
-                             gyroscope_x,
-                             gyroscope_y,
-                             gyroscope_z,
-                             -1 if time_stamp < fault_time else broken_index,
-                             1 if time_stamp < fault_time else thrust_scale])
+                writer.writerow([run_id,
+                                time_stamp,
+                                accelerometer_x,
+                                accelerometer_y,
+                                accelerometer_z,
+                                gyroscope_x,
+                                gyroscope_y,
+                                gyroscope_z,
+                                0 if time_stamp < fault_time else 1])
+                                # -1 if time_stamp < fault_time else broken_index,
+                                # 1 if time_stamp < fault_time else thrust_scale,
+                                # 0 if time_stamp < fault_time else 1])
 
 # print('Simulate.')
 # (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
@@ -193,47 +222,47 @@ for (i, p) in enumerate(vio.pose):
 
 # %% Plot trace of covariance matrix
 
-plt.plot(vio.trace_covariance)
-plt.title('Trace of covariance matrix')
+# plt.plot(vio.trace_covariance)
+# plt.title('Trace of covariance matrix')
 
 # %% Plot results
 
-fig = plt.figure()
+# fig = plt.figure()
+#
+# plt.subplot(121)
+# plt.plot(euler[:, 0], label='yaw')
+# plt.plot(euler[:, 1], label='pitch')
+# plt.plot(euler[:, 2], label='roll')
+# plt.ylabel('degrees')
+# plt.title('Attitude of Quad')
+# plt.legend()
 
-plt.subplot(121)
-plt.plot(euler[:, 0], label='yaw')
-plt.plot(euler[:, 1], label='pitch')
-plt.plot(euler[:, 2], label='roll')
-plt.ylabel('degrees')
-plt.title('Attitude of Quad')
-plt.legend()
-
-plt.subplot(122)
-plt.plot(translation[:, 0], label='Tx')
-plt.plot(translation[:, 1], label='Ty')
-plt.plot(translation[:, 2], label='Tz')
-plt.ylabel('meters')
-plt.title('Position of Quad')
-plt.legend()
-
-#%%
-
-plt.figure()
-plt.plot(velocity[:, 0], label='vx')
-plt.plot(velocity[:, 1], label='vy')
-plt.plot(velocity[:, 2], label='vz')
-plt.ylabel('meters per second')
-plt.title('Velocity of Quad')
-plt.legend()
+# plt.subplot(122)
+# plt.plot(translation[:, 0], label='Tx')
+# plt.plot(translation[:, 1], label='Ty')
+# plt.plot(translation[:, 2], label='Tz')
+# plt.ylabel('meters')
+# plt.title('Position of Quad')
+# plt.legend()
 
 #%%
-plt.figure()
-plt.plot(a_bias[:, 0], label='ax')
-plt.plot(a_bias[:, 1], label='ay')
-plt.plot(a_bias[:, 2], label='az')
-plt.ylabel('meters per second squared')
-plt.title('Accelerometer Bias')
-plt.legend()
+
+# plt.figure()
+# plt.plot(velocity[:, 0], label='vx')
+# plt.plot(velocity[:, 1], label='vy')
+# plt.plot(velocity[:, 2], label='vz')
+# plt.ylabel('meters per second')
+# plt.title('Velocity of Quad')
+# plt.legend()
+
+#%%
+# plt.figure()
+# plt.plot(a_bias[:, 0], label='ax')
+# plt.plot(a_bias[:, 1], label='ay')
+# plt.plot(a_bias[:, 2], label='az')
+# plt.ylabel('meters per second squared')
+# plt.title('Accelerometer Bias')
+# plt.legend()
 
 ###############PLANNING PLOTTING##############################
 
@@ -253,16 +282,16 @@ flight_time = sim_time[-1]
 flight_distance = np.sum(np.linalg.norm(np.diff(state['x'], axis=0),axis=1))
 planning_time = planning_end_time - planning_start_time
 
-print()
-print(f"Results:")
-print(f"  No Collision:    {'pass' if no_collision else 'FAIL'}")
-print(f"  Stopped at Goal: {'pass' if stopped_at_goal else 'FAIL'}")
-print(f"  Flight time:     {flight_time:.1f} seconds")
-print(f"  Flight distance: {flight_distance:.1f} meters")
-print(f"  Planning time:   {planning_time:.1f} seconds")
-if not no_collision:
-    print()
-    print(f"  The robot collided at location {collision_pts[0]}!")
+# print()
+# print(f"Results:")
+# print(f"  No Collision:    {'pass' if no_collision else 'FAIL'}")
+# print(f"  Stopped at Goal: {'pass' if stopped_at_goal else 'FAIL'}")
+# print(f"  Flight time:     {flight_time:.1f} seconds")
+# print(f"  Flight distance: {flight_distance:.1f} meters")
+# print(f"  Planning time:   {planning_time:.1f} seconds")
+# if not no_collision:
+#     print()
+#     print(f"  The robot collided at location {collision_pts[0]}!")
 
 # Plot Results
 #
@@ -271,143 +300,143 @@ if not no_collision:
 
 # Visualize the original dense path from A*, your sparse waypoints, and the
 # smooth trajectory.
-fig = plt.figure('A* Path, Waypoints, and Trajectory')
-ax = Axes3Ds(fig)
-world.draw(ax)
-ax.plot([start[0]], [start[1]], [start[2]], 'go', markersize=16, markeredgewidth=3, markerfacecolor='none')
-ax.plot( [goal[0]],  [goal[1]],  [goal[2]], 'ro', markersize=16, markeredgewidth=3, markerfacecolor='none')
-if hasattr(my_world_traj, 'path'):
-    if my_world_traj.path is not None:
-        world.draw_line(ax, my_world_traj.path, color='red', linewidth=1)
-else:
-    print("Have you set \'self.path\' in WorldTraj.__init__?")
-if hasattr(my_world_traj, 'points'):
-    if my_world_traj.points is not None:
-        world.draw_points(ax, my_world_traj.points, color='purple', markersize=8)
-else:
-    print("Have you set \'self.points\' in WorldTraj.__init__?")
-world.draw_line(ax, flat['x'], color='black', linewidth=2)
-ax.legend(handles=[
-    Line2D([], [], color='red', linewidth=1, label='Dense A* Path'),
-    Line2D([], [], color='purple', linestyle='', marker='.', markersize=8, label='Sparse Waypoints'),
-    Line2D([], [], color='black', linewidth=2, label='Trajectory')],
-    loc='upper right')
+# fig = plt.figure('A* Path, Waypoints, and Trajectory')
+# ax = Axes3Ds(fig)
+# world.draw(ax)
+# ax.plot([start[0]], [start[1]], [start[2]], 'go', markersize=16, markeredgewidth=3, markerfacecolor='none')
+# ax.plot( [goal[0]],  [goal[1]],  [goal[2]], 'ro', markersize=16, markeredgewidth=3, markerfacecolor='none')
+# if hasattr(my_world_traj, 'path'):
+#     if my_world_traj.path is not None:
+#         world.draw_line(ax, my_world_traj.path, color='red', linewidth=1)
+# else:
+#     print("Have you set \'self.path\' in WorldTraj.__init__?")
+# if hasattr(my_world_traj, 'points'):
+#     if my_world_traj.points is not None:
+#         world.draw_points(ax, my_world_traj.points, color='purple', markersize=8)
+# else:
+#     print("Have you set \'self.points\' in WorldTraj.__init__?")
+# world.draw_line(ax, flat['x'], color='black', linewidth=2)
+# ax.legend(handles=[
+#     Line2D([], [], color='red', linewidth=1, label='Dense A* Path'),
+#     Line2D([], [], color='purple', linestyle='', marker='.', markersize=8, label='Sparse Waypoints'),
+#     Line2D([], [], color='black', linewidth=2, label='Trajectory')],
+#     loc='upper right')
 
 # Position and Velocity vs. Time
-(fig, axes) = plt.subplots(nrows=2, ncols=1, sharex=True, num='Position vs Time')
-x = state['x']
-x_des = flat['x']
-ax = axes[0]
-ax.plot(sim_time, x[:,0], 'r',    sim_time, x[:,1], 'g',    sim_time, x[:,2], 'b', linewidth=1, alpha=0.6)
-ax.legend(('x', 'y', 'z'), loc='upper right')
-ax.plot(sim_time, x_des[:,0], 'k', sim_time, x_des[:,1], 'k', sim_time, x_des[:,2], 'k', linewidth=0.5, alpha=0.4)
-ax.set_ylabel('position, m')
-ax.grid('major')
-ax.set_title('Position')
+# (fig, axes) = plt.subplots(nrows=2, ncols=1, sharex=True, num='Position vs Time')
+# x = state['x']
+# x_des = flat['x']
+# ax = axes[0]
+# ax.plot(sim_time, x[:,0], 'r',    sim_time, x[:,1], 'g',    sim_time, x[:,2], 'b', linewidth=1, alpha=0.6)
+# ax.legend(('x', 'y', 'z'), loc='upper right')
+# ax.plot(sim_time, x_des[:,0], 'k', sim_time, x_des[:,1], 'k', sim_time, x_des[:,2], 'k', linewidth=0.5, alpha=0.4)
+# ax.set_ylabel('position, m')
+# ax.grid('major')
+# ax.set_title('Position')
 
-x_est = est_state['x']
-ax = axes[0]
-ax.plot(sim_time, x_des[:,0], 'r--', sim_time, x_des[:,1], 'g--', sim_time, x_des[:,2], 'b-', linewidth=2.5)
+# x_est = est_state['x']
+# ax = axes[0]
+# ax.plot(sim_time, x_des[:,0], 'r--', sim_time, x_des[:,1], 'g--', sim_time, x_des[:,2], 'b-', linewidth=2.5)
 # ax.legend(('xest', 'yest', 'zest'), loc='lower right')
 
-v = state['v']
-v_des = flat['x_dot']
-ax = axes[1]
-ax.plot(sim_time, v[:,0], 'r',    sim_time, v[:,1], 'g',    sim_time, v[:,2], 'b', linewidth=1,alpha=0.6)
-ax.legend(('x', 'y', 'z'), loc='upper right')
-ax.plot(sim_time, v_des[:,0], 'k', sim_time, v_des[:,1], 'k', sim_time, v_des[:,2], 'k', linewidth=0.5, alpha=0.5)
-ax.set_ylabel('velocity, m/s')
-ax.set_xlabel('time, s')
-ax.grid('major')
+# v = state['v']
+# v_des = flat['x_dot']
+# ax = axes[1]
+# ax.plot(sim_time, v[:,0], 'r',    sim_time, v[:,1], 'g',    sim_time, v[:,2], 'b', linewidth=1,alpha=0.6)
+# ax.legend(('x', 'y', 'z'), loc='upper right')
+# ax.plot(sim_time, v_des[:,0], 'k', sim_time, v_des[:,1], 'k', sim_time, v_des[:,2], 'k', linewidth=0.5, alpha=0.5)
+# ax.set_ylabel('velocity, m/s')
+# ax.set_xlabel('time, s')
+# ax.grid('major')
 
-v_est = est_state['v']
-ax = axes[1]
-ax.plot(sim_time, v_est[:,0], 'r--', sim_time, v_est[:,1], 'g--', sim_time, v_est[:,2], 'b--', linewidth=2.5)
+# v_est = est_state['v']
+# ax = axes[1]
+# ax.plot(sim_time, v_est[:,0], 'r--', sim_time, v_est[:,1], 'g--', sim_time, v_est[:,2], 'b--', linewidth=2.5)
 # ax.legend(('xest', 'yest', 'zest'), loc='lower right')
 
 # Orientation and Angular Velocity vs. Time
-(fig, axes) = plt.subplots(nrows=2, ncols=1, sharex=True, num='Orientation vs Time')
-q_des = control['cmd_q']
-q = state['q']
-ax = axes[0]
-ax.plot(sim_time, q[:,0], 'r.',    sim_time, q[:,1], 'g.',    sim_time, q[:,2], 'b.',    sim_time, q[:,3],     'k.', linewidth=1,alpha=0.6)
-ax.legend(('i', 'j', 'k', 'w'), loc='upper right')
-ax.plot(sim_time, q_des[:,0], 'k', sim_time, q_des[:,1], 'k', sim_time, q_des[:,2], 'k', sim_time, q_des[:,3], 'k', linewidth=0.5, alpha=0.5)
-ax.set_ylabel('quaternion')
-ax.set_xlabel('time, s')
-ax.grid('major')
+# (fig, axes) = plt.subplots(nrows=2, ncols=1, sharex=True, num='Orientation vs Time')
+# q_des = control['cmd_q']
+# q = state['q']
+# ax = axes[0]
+# ax.plot(sim_time, q[:,0], 'r.',    sim_time, q[:,1], 'g.',    sim_time, q[:,2], 'b.',    sim_time, q[:,3],     'k.', linewidth=1,alpha=0.6)
+# ax.legend(('i', 'j', 'k', 'w'), loc='upper right')
+# ax.plot(sim_time, q_des[:,0], 'k', sim_time, q_des[:,1], 'k', sim_time, q_des[:,2], 'k', sim_time, q_des[:,3], 'k', linewidth=0.5, alpha=0.5)
+# ax.set_ylabel('quaternion')
+# ax.set_xlabel('time, s')
+# ax.grid('major')
 
-q_est = est_state['q']
-ax = axes[0]
-ax.plot(sim_time, q_est[:,0], 'r.',    sim_time, q_est[:,1], 'g.',    sim_time, q_est[:,2], 'b.',    sim_time, q_est[:,3],     'k.', linewidth=2.5)
+# q_est = est_state['q']
+# ax = axes[0]
+# ax.plot(sim_time, q_est[:,0], 'r.',    sim_time, q_est[:,1], 'g.',    sim_time, q_est[:,2], 'b.',    sim_time, q_est[:,3],     'k.', linewidth=2.5)
 # ax.legend(('xest', 'yest', 'zest'), loc='lower right')
 
-w = state['w']
-ax = axes[1]
-ax.plot(sim_time, w[:,0], 'r.', sim_time, w[:,1], 'g.', sim_time, w[:,2], 'b.')
-ax.legend(('x', 'y', 'z'), loc='upper right')
-ax.set_ylabel('angular velocity, rad/s')
-ax.set_xlabel('time, s')
-ax.grid('major')
+# w = state['w']
+# ax = axes[1]
+# ax.plot(sim_time, w[:,0], 'r.', sim_time, w[:,1], 'g.', sim_time, w[:,2], 'b.')
+# ax.legend(('x', 'y', 'z'), loc='upper right')
+# ax.set_ylabel('angular velocity, rad/s')
+# ax.set_xlabel('time, s')
+# ax.grid('major')
 
-w_est = est_state['w']
-ax = axes[1]
-ax.plot(sim_time, w_est[:,0], 'r--', sim_time, w_est[:,1], 'g--', sim_time, w_est[:,2], 'b--', linewidth=2.5)
+# w_est = est_state['w']
+# ax = axes[1]
+# ax.plot(sim_time, w_est[:,0], 'r--', sim_time, w_est[:,1], 'g--', sim_time, w_est[:,2], 'b--', linewidth=2.5)
 # ax.legend(('xest', 'yest', 'zest'), loc='lower right')
 
 # Commands vs. Time
-(fig, axes) = plt.subplots(nrows=3, ncols=1, sharex=True, num='Commands vs Time')
-s = control['cmd_motor_speeds']
-ax = axes[0]
-ax.plot(sim_time, s[:,0], 'r.', sim_time, s[:,1], 'g.', sim_time, s[:,2], 'b.', sim_time, s[:,3], 'k.')
-ax.legend(('1', '2', '3', '4'), loc='upper right')
-ax.set_ylabel('motor speeds, rad/s')
-ax.grid('major')
-ax.set_title('Commands')
-M = control['cmd_moment']
-ax = axes[1]
-ax.plot(sim_time, M[:,0], 'r.', sim_time, M[:,1], 'g.', sim_time, M[:,2], 'b.')
-ax.legend(('x', 'y', 'z'), loc='upper right')
-ax.set_ylabel('moment, N*m')
-ax.grid('major')
-T = control['cmd_thrust']
-ax = axes[2]
-ax.plot(sim_time, T, 'k.')
-ax.set_ylabel('thrust, N')
-ax.set_xlabel('time, s')
-ax.grid('major')
+# (fig, axes) = plt.subplots(nrows=3, ncols=1, sharex=True, num='Commands vs Time')
+# s = control['cmd_motor_speeds']
+# ax = axes[0]
+# ax.plot(sim_time, s[:,0], 'r.', sim_time, s[:,1], 'g.', sim_time, s[:,2], 'b.', sim_time, s[:,3], 'k.')
+# ax.legend(('1', '2', '3', '4'), loc='upper right')
+# ax.set_ylabel('motor speeds, rad/s')
+# ax.grid('major')
+# ax.set_title('Commands')
+# M = control['cmd_moment']
+# ax = axes[1]
+# ax.plot(sim_time, M[:,0], 'r.', sim_time, M[:,1], 'g.', sim_time, M[:,2], 'b.')
+# ax.legend(('x', 'y', 'z'), loc='upper right')
+# ax.set_ylabel('moment, N*m')
+# ax.grid('major')
+# T = control['cmd_thrust']
+# ax = axes[2]
+# ax.plot(sim_time, T, 'k.')
+# ax.set_ylabel('thrust, N')
+# ax.set_xlabel('time, s')
+# ax.grid('major')
 
 # 3D Paths
-fig = plt.figure('3D Path')
-ax = Axes3Ds(fig)
-world.draw(ax)
-ax.plot([start[0]], [start[1]], [start[2]], 'go', markersize=16, markeredgewidth=3, markerfacecolor='none')
-ax.plot( [goal[0]],  [goal[1]],  [goal[2]], 'ro', markersize=16, markeredgewidth=3, markerfacecolor='none')
-world.draw_line(ax, flat['x'], color='black', linewidth=2)
-world.draw_points(ax, state['x'], color='blue', markersize=4)
-if collision_pts.size > 0:
-    ax.plot(collision_pts[0,[0]], collision_pts[0,[1]], collision_pts[0,[2]], 'rx', markersize=36, markeredgewidth=4)
-ax.legend(handles=[
-    Line2D([], [], color='black', linewidth=2, label='Trajectory'),
-    Line2D([], [], color='blue', linestyle='', marker='.', markersize=4, label='Flight')],
-    loc='upper right')
+# fig = plt.figure('3D Path')
+# ax = Axes3Ds(fig)
+# world.draw(ax)
+# ax.plot([start[0]], [start[1]], [start[2]], 'go', markersize=16, markeredgewidth=3, markerfacecolor='none')
+# ax.plot( [goal[0]],  [goal[1]],  [goal[2]], 'ro', markersize=16, markeredgewidth=3, markerfacecolor='none')
+# world.draw_line(ax, flat['x'], color='black', linewidth=2)
+# world.draw_points(ax, state['x'], color='blue', markersize=4)
+# if collision_pts.size > 0:
+#     ax.plot(collision_pts[0,[0]], collision_pts[0,[1]], collision_pts[0,[2]], 'rx', markersize=36, markeredgewidth=4)
+# ax.legend(handles=[
+#     Line2D([], [], color='black', linewidth=2, label='Trajectory'),
+#     Line2D([], [], color='blue', linestyle='', marker='.', markersize=4, label='Flight')],
+#     loc='upper right')
 
 
-accelerometer_measurements = []
-for accel, _ in imu_measurements:
-    accelerometer_measurements.append(accel)
-accelerometer_measurements = np.array(accelerometer_measurements)
-plt.figure()
-plt.plot(sim_time[1:], accelerometer_measurements[: ,0], label='x')
-plt.plot(sim_time[1:], accelerometer_measurements[: ,1], label='y')
-plt.plot(sim_time[1:], accelerometer_measurements[: ,2], label='z')
-plt.title('Accelerometer Measurements')
-plt.legend()
+# accelerometer_measurements = []
+# for accel, _ in imu_measurements:
+#     accelerometer_measurements.append(accel)
+# accelerometer_measurements = np.array(accelerometer_measurements)
+# plt.figure()
+# plt.plot(sim_time[1:], accelerometer_measurements[: ,0], label='x')
+# plt.plot(sim_time[1:], accelerometer_measurements[: ,1], label='y')
+# plt.plot(sim_time[1:], accelerometer_measurements[: ,2], label='z')
+# plt.title('Accelerometer Measurements')
+# plt.legend()
 # Animation (Slow)
 #
 # Instead of viewing the animation live, you may provide a .mp4 filename to save.
 
-R = Rotation.from_quat(state['q']).as_matrix()
-ani = animate(sim_time, state['x'], R, world=world, filename=None)
+# R = Rotation.from_quat(state['q']).as_matrix()
+# ani = animate(sim_time, state['x'], R, world=world, filename=None)
 
-plt.show()
+# plt.show()
