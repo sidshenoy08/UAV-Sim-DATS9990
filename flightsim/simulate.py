@@ -3,6 +3,7 @@ from enum import Enum
 import functools
 import copy
 import numpy as np
+from matplotlib.pyplot import broken_barh
 from numpy.linalg import inv, norm
 import scipy.integrate
 from scipy.spatial.transform import Rotation
@@ -20,7 +21,8 @@ class ExitStatus(Enum):
     FLY_AWAY = 'Failure: Your quadrotor is out of control; it flew away with a position error greater than 20 meters.'
 
 
-def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminate=None, vio=None, stereo=None, broken_index=-1, thrust_scale=1.0, fault_time=0.0, fault_profile="normal"):
+# def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminate=None, vio=None, stereo=None, broken_index=-1, thrust_scale=1.0, fault_time=0.0, fault_profile="normal"):
+def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminate=None, vio=None, stereo=None, thrust_scale=None, fault_time=0.0, fault_profile="normal"):
     """
     Perform a quadrotor simulation and return the numerical results.
 
@@ -92,7 +94,8 @@ def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminat
 
     # Initialize VIO 
     if vio is not None and not vio.initialized:
-        state_dot = quadrotor.statedot(state[0], control[0]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
+        # state_dot = quadrotor.statedot(state[0], control[0]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
+        state_dot = quadrotor.statedot(state[0], control[0]['cmd_motor_speeds'], time[-1], t_step, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
         vio.initialize(state[0], state_dot, time[0])
     if vio is not None and not stereo.initialized:
         stereo.sample_features()
@@ -104,10 +107,13 @@ def simulate(initial_state, quadrotor, controller, trajectory, t_final, terminat
         if exit_status:
             break
         time.append(time[-1] + t_step)
-        state.append(quadrotor.step(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile))
+        # state.append(quadrotor.step(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile))
+        state.append(quadrotor.step(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, thrust_scale=thrust_scale,
+                           fault_time=fault_time, fault_profile=fault_profile))
         flat.append(sanitize_trajectory_dic(trajectory.update(time[-1])))
         if vio is not None:
-            state_dot = quadrotor.statedot(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
+            # state_dot = quadrotor.statedot(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, broken_index=broken_index, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
+            state_dot = quadrotor.statedot(state[-1], control[-1]['cmd_motor_speeds'], time[-1], t_step, thrust_scale=thrust_scale, fault_time=fault_time, fault_profile=fault_profile)
             state_estimated, image_feature, imu_measurement = vio.step(state[-1], state_dot, time[-1], stereo)
             if image_feature is not None:
                 # meaning that the camera update is triggered
@@ -302,7 +308,8 @@ class Quadrotor(object):
         else:
             return 1.0
 
-    def statedot(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=1.0, fault_time=0.0, fault_profile="normal"):
+    # def statedot(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=1.0, fault_time=0.0, fault_profile="normal"):
+    def statedot(self, state, cmd_rotor_speeds, curr_time, t_step, thrust_scale=None, fault_time=0.0, fault_profile="normal"):
         """
         Integrate dynamics forward from state given constant cmd_rotor_speeds for time t_step.
         """
@@ -317,21 +324,38 @@ class Quadrotor(object):
         # Compute individual rotor thrusts and net thrust and net moment.
         rotor_thrusts = self.k_thrust * rotor_speeds ** 2
 
-        if broken_index != -1 and curr_time >= fault_time:
-            eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
-            rotor_thrusts[broken_index] *= eff_scale
-            thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[broken_index] + 1e-6)
-            rotor_thrusts[broken_index] += np.random.normal(0.0, thrust_noise_scale)
+        # if broken_index != -1 and curr_time >= fault_time:
+        #     eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
+        #     rotor_thrusts[broken_index] *= eff_scale
+        #     thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[broken_index] + 1e-6)
+        #     rotor_thrusts[broken_index] += np.random.normal(0.0, thrust_noise_scale)
+
+        if curr_time >= fault_time:
+            for rotor_index, _ in enumerate(rotor_thrusts):
+                eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale[rotor_index], fault_profile)
+                rotor_thrusts[rotor_index] *= eff_scale
+                thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[rotor_index] + 1e-6)
+                rotor_thrusts[rotor_index] += np.random.normal(0.0, thrust_noise_scale)
 
         TM = self.to_TM @ rotor_thrusts
 
-        if broken_index != -1 and curr_time >= fault_time:
-            eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
-            severity = 1.0 - eff_scale
+        # if broken_index != -1 and curr_time >= fault_time:
+        #     eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
+        #     severity = 1.0 - eff_scale
+        #     disturbance = np.array([
+        #         0.02 * severity * (np.random.rand() - 0.5),
+        #         0.02 * severity * (np.random.rand() - 0.5),
+        #         0.05 * severity * (np.random.rand() - 0.5)
+        #     ])
+        #     TM[1:4] += disturbance
+
+        if curr_time >= fault_time:
+            overall_eff = np.mean([self.inject_fault(curr_time, fault_time, ts, fault_profile) for ts in thrust_scale])
+            overall_severity = 1.0 - overall_eff
             disturbance = np.array([
-                0.02 * severity * (np.random.rand() - 0.5),
-                0.02 * severity * (np.random.rand() - 0.5),
-                0.05 * severity * (np.random.rand() - 0.5)
+                0.02 * overall_severity * (np.random.rand() - 0.5),
+                0.02 * overall_severity * (np.random.rand() - 0.5),
+                0.05 * overall_severity * (np.random.rand() - 0.5)
             ])
             TM[1:4] += disturbance
 
@@ -351,7 +375,7 @@ class Quadrotor(object):
         state_dot = {'vdot': v_dot, 'wdot': w_dot}
         return state_dot
 
-    def step(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=1.0, fault_time=0.0, fault_profile="normal"):
+    def step(self, state, cmd_rotor_speeds, curr_time, t_step, broken_index=-1, thrust_scale=None, fault_time=0.0, fault_profile="normal"):
         """
         Integrate dynamics forward from state given constant cmd_rotor_speeds for time t_step.
         """
@@ -367,21 +391,38 @@ class Quadrotor(object):
         # Compute individual rotor thrusts and net thrust and net moment.
         rotor_thrusts = self.k_thrust * rotor_speeds ** 2
 
-        if broken_index != -1 and curr_time >= fault_time:
-            eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
-            rotor_thrusts[broken_index] *= eff_scale
-            thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[broken_index] + 1e-6)
-            rotor_thrusts[broken_index] += np.random.normal(0.0, thrust_noise_scale)
+        # if broken_index != -1 and curr_time >= fault_time:
+        #     eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
+        #     rotor_thrusts[broken_index] *= eff_scale
+        #     thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[broken_index] + 1e-6)
+        #     rotor_thrusts[broken_index] += np.random.normal(0.0, thrust_noise_scale)
+
+        if curr_time >= fault_time:
+            for rotor_index, _ in enumerate(rotor_thrusts):
+                eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale[rotor_index], fault_profile)
+                rotor_thrusts[rotor_index] *= eff_scale
+                thrust_noise_scale = 0.05 * (1.0 - eff_scale) * np.abs(rotor_thrusts[rotor_index] + 1e-6)
+                rotor_thrusts[rotor_index] += np.random.normal(0.0, thrust_noise_scale)
 
         TM = self.to_TM @ rotor_thrusts
 
-        if broken_index != -1 and curr_time >= fault_time:
-            eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
-            severity = 1.0 - eff_scale
+        # if broken_index != -1 and curr_time >= fault_time:
+        #     eff_scale = self.inject_fault(curr_time, fault_time, thrust_scale, fault_profile)
+        #     severity = 1.0 - eff_scale
+        #     disturbance = np.array([
+        #         0.02 * severity * (np.random.rand() - 0.5),
+        #         0.02 * severity * (np.random.rand() - 0.5),
+        #         0.05 * severity * (np.random.rand() - 0.5)
+        #     ])
+        #     TM[1:4] += disturbance
+
+        if curr_time >= fault_time:
+            overall_eff = np.mean([self.inject_fault(curr_time, fault_time, ts, fault_profile) for ts in thrust_scale])
+            overall_severity = 1.0 - overall_eff
             disturbance = np.array([
-                0.02 * severity * (np.random.rand() - 0.5),
-                0.02 * severity * (np.random.rand() - 0.5),
-                0.05 * severity * (np.random.rand() - 0.5)
+                0.02 * overall_severity * (np.random.rand() - 0.5),
+                0.02 * overall_severity * (np.random.rand() - 0.5),
+                0.05 * overall_severity * (np.random.rand() - 0.5)
             ])
             TM[1:4] += disturbance
 

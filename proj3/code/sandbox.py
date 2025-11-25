@@ -110,36 +110,62 @@ def generate_thrust():
 
 with open("imu_readings.csv", "w", newline='') as data_file:
     writer = csv.writer(data_file)
+
     writer.writerow(
         ['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y',
-         'gyroscope_z', 'fault_active'])
+             'gyroscope_z', 'rotor0_eff', 'rotor1_eff', 'rotor2_eff', 'rotor3_eff'])
+
+    # writer.writerow(
+    #     ['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y',
+    #      'gyroscope_z', 'fault_label'])
+
     # writer.writerow(['run_id', 'time', 'accelerometer_x', 'accelerometer_y', 'accelerometer_z', 'gyroscope_x', 'gyroscope_y', 'gyroscope_z', 'broken_index', 'thrust_scale', 'fault_active'])
     # for broken_index in [-1, 0, 1, 2, 3]:
+
     for run_id in range(N_RUNS):
-        rotor_indices = [-1, 0, 1, 2, 3]
-        broken_index = random.choice(rotor_indices)
-        thrust_scale = 1.0
+        # rotor_indices = [-1, 0, 1, 2, 3]
+        # broken_index = random.choice(rotor_indices)
+        fault_active = random.choice([0, 1])
+        thrust_scale = []
+        # thrust_scale = 1.0
         fault_profile = "normal"
 
-        if broken_index != -1:
-            thrust_scale = generate_thrust()
+        if fault_active == 1:
+            for index in range(0, 4):
+                thrust_scale.append(generate_thrust())
             fault_profile = random.choice(["abrupt", "ramp", "intermittent"])
         else:
-            thrust_scale = random.uniform(0.85, 1.15)
+            thrust_scale.extend([1.0] * 4)
+
+        # if broken_index != -1:
+        #     thrust_scale = generate_thrust()
+        #     fault_profile = random.choice(["abrupt", "ramp", "intermittent"])
+        # else:
+        #     thrust_scale = random.uniform(0.85, 1.15)
 
         # thrust_scale = random.uniform(0.0, 1.0) if broken_index != -1 else 1
 
-        fault_time = round(random.uniform(0.1 * t_final, 0.8 * t_final), 3) if broken_index != -1 else 100
+        # fault_time = round(random.uniform(0.1 * t_final, 0.8 * t_final), 3) if broken_index != -1 else 100
+
+        fault_time = round(random.uniform(0.1 * t_final, 0.8 * t_final), 3) if fault_active == 1 else 100
 
         # print(broken_index, thrust_scale, fault_time)
 
         print('Simulate.')
+        # (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
+        #                                                                                quadrotor,
+        #                                                                                my_se3_control,
+        #                                                                                my_world_traj,
+        #                                                                                t_final, stereo=stereo, vio=vio,
+        #                                                                                broken_index=broken_index,
+        #                                                                                thrust_scale=thrust_scale,
+        #                                                                                fault_time=fault_time,
+        #                                                                                fault_profile=fault_profile)
         (sim_time, state, est_state, control, flat, exit, imu_measurements) = simulate(initial_state,
                                                                                        quadrotor,
                                                                                        my_se3_control,
                                                                                        my_world_traj,
                                                                                        t_final, stereo=stereo, vio=vio,
-                                                                                       broken_index=broken_index,
                                                                                        thrust_scale=thrust_scale,
                                                                                        fault_time=fault_time,
                                                                                        fault_profile=fault_profile)
@@ -161,7 +187,21 @@ with open("imu_readings.csv", "w", newline='') as data_file:
                                 gyroscope_x,
                                 gyroscope_y,
                                 gyroscope_z,
-                                0 if time_stamp < fault_time else 1])
+                                1.0 if time_stamp < fault_time else thrust_scale[0],
+                                1.0 if time_stamp < fault_time else thrust_scale[1],
+                                1.0 if time_stamp < fault_time else thrust_scale[2],
+                                1.0 if time_stamp < fault_time else thrust_scale[3]])
+
+
+                # writer.writerow([run_id,
+                #                 time_stamp,
+                #                 accelerometer_x,
+                #                 accelerometer_y,
+                #                 accelerometer_z,
+                #                 gyroscope_x,
+                #                 gyroscope_y,
+                #                 gyroscope_z,
+                #                 0 if time_stamp < fault_time else (broken_index + 1)])
                                 # -1 if time_stamp < fault_time else broken_index,
                                 # 1 if time_stamp < fault_time else thrust_scale,
                                 # 0 if time_stamp < fault_time else 1])
